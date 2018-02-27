@@ -2,8 +2,20 @@
 
 # contains fish ID's and their labeled species, along with other data
 FISH_FILE=fish.csv
+if [ ! -f "$FISH_FILE" ]
+then
+    echo "ERROR: add fish.csv to the current directory, or change"
+    echo "       the script to use the proper name of the file"
+    exit 1
+fi
 # contains fish ID's and the file containing DNA test results
 FILES_FILE=files.csv
+if [ ! -f "$FILES_FILE" ]
+then
+    echo "ERROR: add files.csv to the current directory, or change"
+    echo "       the script to use the proper name of the file"
+    exit 1
+fi
 
 # contains a copy of this script's output
 REPORT_FILE=report.txt
