@@ -12,19 +12,22 @@ REPORT_FILE=report.txt
 REPORT_CSV=fish_report.csv
 
 log() {
-    echo -e "$@" | tee --append report.txt
+    echo -e "$1" | tee --append report.txt >&2
     # I prefer:
     ## tee --append report.txt <<<"$@"
     # but vim is making syntax highlighting a pain if I do that :/
     # (even though it's valid).
     # I'll change it back when(if) I fix vim.
 }
+debug() {
+    log "=== $1 ==="
+}
 log "[Started $(date)]"
 
 getFishInfo() { # (id)
     ## Assumptions:
     ## fish IDs are in the first col, and start each line in the file
-    grep "^$1" "$FISH_FILE" | head -1
+    strings "$FISH_FILE" | grep "^$1" | head -1
 }
 
 getSpeciesGuess() { # (csv info string)
@@ -32,7 +35,7 @@ getSpeciesGuess() { # (csv info string)
 }
 
 getFishFilePrefixes() { # (id)
-    grep ",$1" $FILES_FILE | awk -F, '{print $3}'
+    strings "$FILES_FILE" | grep ",$1" | awk -F, '{print $3}'
 }
 
 getFishSequence() { # (file prefix)
@@ -42,6 +45,7 @@ getFishSequence() { # (file prefix)
 queryNIH() { # (sequence)
     REQUEST_ID=`./query_nih.sh "$1"`
     # be nice
+    debug "REQUEST_ID: $REQUEST_ID"
     sleep 1m
     curl 'https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID='$REQUEST_ID 2>/dev/null \
         | grep 'class="tl"' \
@@ -68,28 +72,35 @@ NUM_FISH=`wc -l fish.csv | awk '{print $1}'`
 ##    * Fish IDs are 0-padded 3-digit numbers
 for FISH_ID in `seq -w 001 $NUM_FISH`
 do
-    FISH_INFO=`getFishInfo $FISH_ID`
+    FISH_INFO=$(getFishInfo $FISH_ID)
+    debug "FISH_INFO: $FISH_INFO"
     FISH_LABEL=`getSpeciesGuess "$FISH_INFO"`
+    debug "FISH_LABEL: $FISH_LABEL"
     [ -z "$FISH_LABEL" ] && continue # skip if no label
-    log "Fish labeled as '$FISH_LABEL' tests as..."
-    GUESSES=""
+    log "Fish [$FISH_ID] labeled as '$FISH_LABEL' tests as..."
+    GUESSES_FILE=`mktemp`
     for PREFIX in `getFishFilePrefixes $FISH_ID`
     do
+        debug "PREFIX: $PREFIX"
         FISH_SEQUENCE=`getFishSequence $PREFIX`
-        for GUESS in `queryNIH $FISH_SEQUENCE`
+        debug "FISH_SEQUENCE: $FISH_SEQUENCE"
+        [ -z "$FISH_SEQUENCE" ] && continue # skip if no fish seq
+        queryNIH "$FISH_SEQUENCE" |
+        while read GUESS
         do
             log "\t[$PREFIX] $GUESS"
-            GUESSES="$GUESSES,$GUESS"
+            echo -n ",\"$GUESS\"" >> "$GUESSES_FILE"
         done
     done
     # no guesses = no data file?
     # if not, it's something more sinister...
-    if [ -z "$GUESSES" ]
+    if [ "$(wc -c "$GUESSES_FILE" | awk '{print $1}')" -le 3 ]
     then
         log "\tNothing (no data file?)"
     fi
     # append current row, with guesses
-    echo "$FISH_INFO$GUESSES" >> $REPORT_CSV
+    echo "$FISH_INFO$(cat $GUESSES_FILE)" >> $REPORT_CSV
+    rm $GUESSES_FILE
     log ""
 done
 
