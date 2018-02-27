@@ -35,6 +35,7 @@ debug() {
     log "=== $1 ==="
 }
 log "[Started $(date)]"
+log ""
 
 getFishInfo() { # (id)
     ## Assumptions:
@@ -116,3 +117,4 @@ do
     log ""
 done
 
+log "[Finished $(date)]"
